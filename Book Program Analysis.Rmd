@@ -1,0 +1,190 @@
+---
+title: "Book Program Analysis"
+author: "Joshua Goldberg"
+date: "9/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+```
+
+## Summary
+During this project, I investigated book sales and reviews over time using sentiment analysis to understand how the user submitted reviews correlate with the purchase totals for each book for this new program.
+
+
+## Goal
+Throughout the analysis, the goal was to analyze whether or not this new program was successful and increasing sales and improving review quality.
+
+
+## Introduction
+When exploring the data that was provided for this project, there were six data science books that I also provided with user feedback reviews on. Using the reviews, I was able to probe for trends and insights by looking at purchase rates over time and to see which other factors underwent significant total changes after given dates.
+
+
+## Findings
+From this analysis, it appears that overall, review quality decreased after the inception of the new program, and when we examine these differences for the two customer groups, Business increase while Individuals decrease in quality. Similarly, the sales after the new program 
+decrease overall, and for each customer groups, the totals change as does review quality, where Business sales increase while Individual sales decrease.
+
+# Conclusion
+Overall, looking into this data provided a great opportunity to leverage skills in mapping and vectorization, which can be a powerful data science skill to apply when performing function calculations on vectors of data, as I conducted here with book sales and sentiment reviews.
+
+
+## Analysis
+```{r analysis}
+
+#load in data
+book_program <- read_csv("C:/Users/Goldbej6/Desktop/Learning/R/Book_Program_Project/sales2019.csv")
+
+
+#quick df analysis
+dim(book_program) ##5000 rows and 5 columns in dataset
+glimpse(book_program)
+
+#Column Names
+vector_cols <- colnames(book_program)
+vector_cols 
+#the column names represent: (1) The date when a user submitted a book review, (2) The specific text response from their review, (3) The title of the book, (4) The total count of books that this person purchased by each person, (4) The customer type of each person
+
+
+#Datatypes
+col_types <- for (c in colnames(book_program)) {
+  paste0("The Data Type of the '", c, "' column is: ",typeof(book_program[[c]])) %>% 
+  print
+}
+  
+col_types
+
+
+#Unique Values
+for (c in vector_cols) {
+  print("Unique column values:")
+  print(c)
+  print(unique(book_program[[c]]))
+  print(" ")
+}
+
+
+#Locating and Removing Missing Values
+#The total_purchased column appears to have missing values
+for (c in colnames(book_program)) {
+  paste0(c,
+         " column, This many rows have missing data: ",
+         is.na(book_program[c]) %>% sum) %>% 
+         print
+}
+
+print("We can see that two columns have missing data, the user_submitted_review column, with around 885 missing data rows, and the total_purchased column, with 718 missing data values")
+
+book_program <- book_program %>% 
+  filter(!(is.na(user_submitted_review)))
+
+dim(book_program) # 585 rows were removed from this operation
+      
+tot_purchased_avg <- book_program %>% 
+  filter(!is.na(total_purchased)) %>%
+  pull(total_purchased) %>% 
+  mean
+        
+# Mean imputation
+book_program <- book_program %>% 
+  mutate(
+    total_purchased_new = if_else(is.na(total_purchased),
+                                  tot_purchased_avg,
+                                  total_purchased)
+  )
+
+
+# Adding in Sentiment Assessment
+#Unique column values
+book_program %>% 
+  pull(user_submitted_review) %>% 
+  unique
+
+
+# Function to evaluate Sentiment
+positive_sentiment <- function(review) {
+  review_status = case_when(
+    str_detect(review, "ok") ~ TRUE,
+    str_detect(review, "awesome") ~ TRUE,
+    str_detect(review, "a lot") ~ TRUE,
+    str_detect(review, "not") ~ FALSE,
+    str_detect(review, "hated") ~ FALSE,
+    TRUE ~ FALSE
+  )
+}
+
+# Adding new column to dataframe for Sentiment check
+book_program <- book_program %>% 
+  mutate(
+    positive_sentiment_indicator = unlist(map(user_submitted_review, positive_sentiment))
+  )
+
+# Date/Time Conversions
+library(lubridate)
+book_program <- book_program %>% 
+  mutate(
+    Date_Time = lubridate::mdy(date)
+  )
+
+
+# Comparing effectivness of new Program
+book_program <- book_program %>% 
+  mutate(
+    date_comparison = if_else(mdy(date) < mdy("07-01-2019"), "Before", "After")
+  )
+
+
+purch_comp <- book_program %>% 
+  group_by(date_comparison) %>% 
+  summarize(
+    books_purchased = sum(total_purchased_new)
+  )
+
+print("The program was unfortunately not effective in terms of increasing the number of books sold")
+
+
+# Additional group divisions
+purch_comp <- book_program %>% 
+  group_by(date_comparison, customer_type) %>% 
+  summarize(
+    books_purchased = sum(total_purchased_new)
+  ) %>% 
+  arrange(customer_type, date_comparison)
+
+
+view(purch_comp)
+print("It looks like the effectiveness of the program does differ somewhat based on the groupings - Businesses did do slightly better than did inidividuals, with a slight increased after the program.")
+
+
+# Comparing Sentiment reviews before and after Date of Interest
+reviews_comp <- book_program %>% 
+  group_by(date_comparison) %>% 
+  summarize(
+    positive_review_count = sum(positive_sentiment_indicator)
+  ) %>% 
+  arrange(-positive_review_count)
+
+
+
+
+view(reviews_comp)
+print("The number of positive reviews actually slightly decreased after July 1, 2019. So, review sentiment got worse after the program was created.")
+
+
+library(ggplot2)
+```
+
+## Comparing Book Profit
+
+You can also embed plots, for example:
+
+```{r pressure, echo=TRUE}
+qplot(x = date_comparison,
+      y = books_purchased,
+      color = customer_type,
+      data = purch_comp)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
